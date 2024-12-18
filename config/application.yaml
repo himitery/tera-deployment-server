@@ -1,5 +1,13 @@
 services: []
 
+argocd:
+  url: ""
+  token: ""
+  repository: ""
+  metadata:
+    name: "argocd"
+    namespace: "argocd"
+
 kafka:
   bootstrap_servers: []
   protocol: "SASL" # PLAIN or SASL

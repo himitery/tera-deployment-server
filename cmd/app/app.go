@@ -4,6 +4,7 @@ import (
 	"context"
 	"go.uber.org/fx"
 	"go.uber.org/zap"
+	"tera/deployment/internal/adapters/argocd"
 	"tera/deployment/internal/adapters/kafka"
 	"tera/deployment/internal/domain/services"
 	"tera/deployment/internal/usecases"
@@ -18,9 +19,11 @@ func NewApp(conf *config.Config) *fx.App {
 			logger.Init,
 
 			// adapters
+			argocd.NewArgocd,
 			kafka.NewKafkaConsumer,
 
 			// services
+			services.NewDeploymentManager,
 			services.NewEventProcessor,
 		),
 		fx.Invoke(

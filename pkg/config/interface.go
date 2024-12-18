@@ -1,8 +1,9 @@
 package config
 
 type Config struct {
-	Profile  string          `yaml:"profile"`
+	Profile  string          `json:"profile"`
 	Services []ServiceConfig `yaml:"services"`
+	Argocd   ArgocdConfig    `yaml:"argocd"`
 	Kafka    KafkaConfig     `yaml:"kafka"`
 	Logging  LoggingConfig   `yaml:"logging"`
 }
@@ -14,6 +15,18 @@ type ServiceConfig struct {
 		Name    string `yaml:"name"`
 		Version string `yaml:"version"`
 	} `yaml:"depends"`
+}
+
+type ArgocdConfig struct {
+	URL        string               `yaml:"url"`
+	Token      string               `yaml:"token"`
+	Repository string               `yaml:"repository"`
+	Metadata   ArgocdMetadataConfig `yaml:"metadata"`
+}
+
+type ArgocdMetadataConfig struct {
+	Name      string `yaml:"name"`
+	Namespace string `yaml:"namespace"`
 }
 
 type KafkaConfig struct {

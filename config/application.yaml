@@ -1,0 +1,12 @@
+services: []
+
+kafka:
+  bootstrap_servers: []
+  protocol: "SASL" # PLAIN or SASL
+  sasl:
+    mechanism: "PLAIN"
+    username: ""
+    password: ""
+
+logging:
+  level: info

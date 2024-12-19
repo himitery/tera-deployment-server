@@ -1,7 +1,6 @@
 package services
 
 import (
-	"github.com/google/uuid"
 	"go.uber.org/zap"
 	"strings"
 	"tera/deployment/internal/domain/models"
@@ -66,13 +65,7 @@ func (ctx *EventProcessor) process(message *models.EventMessage) {
 			return
 		}
 
-		uuid, err := uuid.NewUUID()
-		if err != nil {
-			logger.Error("failed to generate uuid", zap.Error(err))
-			return
-		}
-
-		err = ctx.producer.Produce(uuid.String(), applications)
+		err = ctx.producer.Produce(models.ArgocdApplicationList, applications)
 		if err != nil {
 			logger.Error("failed to produce event", zap.Error(err))
 

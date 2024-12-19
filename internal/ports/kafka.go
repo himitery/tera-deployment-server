@@ -1,6 +1,8 @@
 package ports
 
-import "tera/deployment/internal/domain/models"
+import (
+	"tera/deployment/internal/domain/models"
+)
 
 type KafkaConsumer interface {
 	Start(events chan<- *models.EventMessage) error
@@ -8,5 +10,5 @@ type KafkaConsumer interface {
 }
 
 type KafkaProducer interface {
-	Produce(key string, value any) error
+	Produce(key models.Key, value any) error
 }

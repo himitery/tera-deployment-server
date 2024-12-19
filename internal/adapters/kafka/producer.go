@@ -8,6 +8,7 @@ import (
 	"github.com/samber/lo"
 	"go.uber.org/zap"
 	"strings"
+	"tera/deployment/internal/domain/models"
 	"tera/deployment/internal/ports"
 	"tera/deployment/pkg/config"
 	"tera/deployment/pkg/logger"
@@ -47,7 +48,7 @@ func NewKafkaProducer(conf *config.Config) ports.KafkaProducer {
 	}
 }
 
-func (ctx *Producer) Produce(key string, value any) error {
+func (ctx *Producer) Produce(key models.Key, value any) error {
 	data, err := json.Marshal(value)
 	if err != nil {
 		logger.Error("failed to marshal message value to JSON", zap.Error(err))
@@ -59,7 +60,7 @@ func (ctx *Producer) Produce(key string, value any) error {
 	defer close(events)
 
 	err = ctx.producer.Produce(&kafka.Message{
-		Key:   []byte(key),
+		Key:   []byte(key.Value),
 		Value: data,
 		TopicPartition: kafka.TopicPartition{
 			Topic:     lo.ToPtr(ctx.topic),
@@ -84,7 +85,7 @@ func (ctx *Producer) Produce(key string, value any) error {
 		}
 		logger.Info("successfully produced message",
 			zap.String("topic", ctx.topic),
-			zap.String("key", key),
+			zap.String("key", key.Value),
 			zap.Any("value", value),
 		)
 	case *kafka.Error:

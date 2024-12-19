@@ -8,5 +8,5 @@ type KafkaConsumer interface {
 }
 
 type KafkaProducer interface {
-	Produce(topic string, key, value []byte) error
+	Produce(key string, value any) error
 }

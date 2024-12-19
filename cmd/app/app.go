@@ -21,6 +21,7 @@ func NewApp(conf *config.Config) *fx.App {
 			// adapters
 			argocd.NewArgocd,
 			kafka.NewKafkaConsumer,
+			kafka.NewKafkaProducer,
 
 			// services
 			services.NewDeploymentManager,

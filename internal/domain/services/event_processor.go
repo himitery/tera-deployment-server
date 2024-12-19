@@ -1,6 +1,7 @@
 package services
 
 import (
+	"github.com/google/uuid"
 	"go.uber.org/zap"
 	"strings"
 	"tera/deployment/internal/domain/models"
@@ -12,18 +13,21 @@ import (
 type EventProcessor struct {
 	manager  usecases.DeploymentManager
 	consumer ports.KafkaConsumer
+	producer ports.KafkaProducer
 	events   chan *models.EventMessage
 }
 
 func NewEventProcessor(
 	manager usecases.DeploymentManager,
 	consumer ports.KafkaConsumer,
+	producer ports.KafkaProducer,
 ) usecases.EventProcessor {
 	events := make(chan *models.EventMessage)
 
 	return &EventProcessor{
 		manager:  manager,
 		consumer: consumer,
+		producer: producer,
 		events:   events,
 	}
 }
@@ -54,7 +58,29 @@ func (ctx *EventProcessor) Close() error {
 func (ctx *EventProcessor) process(message *models.EventMessage) {
 	logger.Info("new message received", zap.Any("message", message))
 
-	if strings.ToLower(message.Action) == "create" {
+	switch strings.ToLower(message.Action) {
+	case "fetch":
+		applications, err := ctx.manager.GetList()
+		if err != nil {
+			logger.Error("failed to fetch application list", zap.Error(err))
+			return
+		}
+
+		uuid, err := uuid.NewUUID()
+		if err != nil {
+			logger.Error("failed to generate uuid", zap.Error(err))
+			return
+		}
+
+		err = ctx.producer.Produce(uuid.String(), applications)
+		if err != nil {
+			logger.Error("failed to produce event", zap.Error(err))
+
+			return
+		}
+
+		logger.Info("events successfully processed", zap.Any("applications", applications))
+	case "create":
 		application, err := ctx.manager.Create(
 			message.Service,
 			message.Version,

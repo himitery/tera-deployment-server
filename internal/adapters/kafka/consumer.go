@@ -59,9 +59,16 @@ func (ctx *Consumer) Start(events chan<- *models.EventMessage) error {
 		for {
 			switch event := ctx.consumer.Poll(100).(type) {
 			case *kafka.Message:
+				if len(lo.FilterMap(event.Headers, func(item kafka.Header, _ int) (kafka.Header, bool) {
+					return item, item.Key == applicationHeader.Key && string(item.Value) == string(applicationHeader.Value)
+				})) != 0 {
+					continue
+				}
+
 				var message *models.EventMessage
 				if err := json.Unmarshal(event.Value, &message); err != nil {
 					logger.Warn("failed to unmarshal event", zap.Error(err))
+					continue
 				}
 
 				events <- message

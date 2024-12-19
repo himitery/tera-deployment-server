@@ -4,6 +4,7 @@ import (
 	"context"
 	"github.com/argoproj/argo-cd/v2/pkg/apiclient/application"
 	"github.com/argoproj/argo-cd/v2/pkg/apis/application/v1alpha1"
+	"github.com/argoproj/gitops-engine/pkg/health"
 	"github.com/samber/lo"
 	"go.uber.org/zap"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -12,20 +13,22 @@ import (
 	"tera/deployment/internal/ports"
 	"tera/deployment/pkg/config"
 	"tera/deployment/pkg/logger"
+	"time"
 
 	"github.com/argoproj/argo-cd/v2/pkg/apiclient"
 )
 
 type Argocd struct {
-	client     apiclient.Client
-	repository string
-	metadata   metav1.ObjectMeta
+	client        apiclient.Client
+	repository    string
+	metaNamespace string
 }
 
 func NewArgocd(conf *config.Config) ports.Argocd {
 	client, err := apiclient.NewClient(&apiclient.ClientOptions{
 		ServerAddr: conf.Argocd.URL,
 		AuthToken:  conf.Argocd.Token,
+		GRPCWeb:    true,
 	})
 	if err != nil {
 		logger.Error("failed to create Argocd client")
@@ -34,12 +37,9 @@ func NewArgocd(conf *config.Config) ports.Argocd {
 	}
 
 	return &Argocd{
-		client:     client,
-		repository: conf.Argocd.Repository,
-		metadata: metav1.ObjectMeta{
-			Name:      conf.Argocd.Metadata.Name,
-			Namespace: conf.Argocd.Metadata.Namespace,
-		},
+		client:        client,
+		repository:    conf.Argocd.Repository,
+		metaNamespace: conf.Argocd.Metadata.Namespace,
 	}
 }
 
@@ -86,7 +86,10 @@ func (ctx *Argocd) Create(service, version, namespace string, values map[string]
 
 	data, err := client.Create(context.Background(), &application.ApplicationCreateRequest{
 		Application: &v1alpha1.Application{
-			ObjectMeta: ctx.metadata,
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      service,
+				Namespace: ctx.metaNamespace,
+			},
 			Spec: v1alpha1.ApplicationSpec{
 				Project: "default",
 				Source: &v1alpha1.ApplicationSource{
@@ -134,8 +137,58 @@ func (ctx *Argocd) Create(service, version, namespace string, values map[string]
 		return nil, err
 	}
 
+	err = ctx.waitForApplicationSync(service, time.Minute*3)
+	if err != nil {
+		logger.Error("Argocd.Create: application sync failed", zap.Error(err))
+		return nil, err
+	}
+
 	return &models.ArgocdApplication{
 		Name:    strings.ToLower(data.Name),
 		Version: data.Spec.Source.TargetRevision,
 	}, nil
+}
+
+func (ctx *Argocd) waitForApplicationSync(service string, timeout time.Duration) error {
+	syncCtx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
+	ticker := time.NewTicker(5 * time.Second)
+	defer ticker.Stop()
+
+	io, client, err := ctx.client.NewApplicationClient()
+	if err != nil {
+		logger.Error("failed to create Argocd application client", zap.Error(err))
+
+		return err
+	}
+	defer io.Close()
+
+	for {
+		select {
+		case <-syncCtx.Done():
+			return syncCtx.Err()
+		case <-ticker.C:
+			data, err := client.Get(context.Background(), &application.ApplicationQuery{
+				Name: &service,
+			})
+			if err != nil {
+				logger.Error("failed to get Argocd application", zap.Error(err))
+
+				continue
+			}
+
+			logger.Info(
+				"Argocd application status",
+				zap.Any("status", data.Status.Sync.Status),
+				zap.Any("healthStatus", data.Status.Health.Status),
+			)
+
+			if data.Status.Sync.Status == v1alpha1.SyncStatusCodeSynced && data.Status.Health.Status == health.HealthStatusHealthy {
+				logger.Info("Argocd application synced")
+
+				return nil
+			}
+		}
+	}
 }

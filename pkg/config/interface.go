@@ -9,12 +9,14 @@ type Config struct {
 }
 
 type ServiceConfig struct {
+	Name    string                `yaml:"name"`
+	Version string                `yaml:"version"`
+	Depends []ServiceDependConfig `yaml:"depends"`
+}
+
+type ServiceDependConfig struct {
 	Name    string `yaml:"name"`
 	Version string `yaml:"version"`
-	Depends []struct {
-		Name    string `yaml:"name"`
-		Version string `yaml:"version"`
-	} `yaml:"depends"`
 }
 
 type ArgocdConfig struct {
@@ -25,7 +27,6 @@ type ArgocdConfig struct {
 }
 
 type ArgocdMetadataConfig struct {
-	Name      string `yaml:"name"`
 	Namespace string `yaml:"namespace"`
 }
 

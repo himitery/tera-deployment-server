@@ -5,7 +5,6 @@ argocd:
   token: ""
   repository: ""
   metadata:
-    name: "argocd"
     namespace: "argocd"
 
 kafka:

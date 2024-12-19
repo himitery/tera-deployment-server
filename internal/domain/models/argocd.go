@@ -1,6 +1,11 @@
 package models
 
-type ArgocdApplication struct {
+type Application struct {
 	Name    string
 	Version string
+}
+
+type ApplicationStatus struct {
+	Sync   bool
+	Health bool
 }

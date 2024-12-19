@@ -5,7 +5,7 @@ import (
 )
 
 type KafkaConsumer interface {
-	Start(events chan<- *models.EventMessage) error
+	Start(events chan<- any) error
 	Close() error
 }
 

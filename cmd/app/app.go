@@ -16,6 +16,7 @@ func NewApp(conf *config.Config) *fx.App {
 	return fx.New(
 		fx.Provide(
 			func() *config.Config { return conf },
+			func() chan any { return make(chan any, 256) },
 			logger.Init,
 
 			// adapters

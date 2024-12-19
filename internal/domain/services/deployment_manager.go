@@ -15,31 +15,39 @@ import (
 
 type DeploymentManager struct {
 	argocd   ports.Argocd
+	events   chan<- any
 	services []config.ServiceConfig
 }
 
 func NewDeploymentManager(
 	conf *config.Config,
+	events chan any,
 	argocd ports.Argocd,
 ) usecases.DeploymentManager {
 	return &DeploymentManager{
 		argocd:   argocd,
+		events:   events,
 		services: conf.Services,
 	}
 }
 
-func (ctx *DeploymentManager) GetList() ([]models.ArgocdApplication, error) {
+func (ctx *DeploymentManager) GetList() ([]models.Application, error) {
 	applications, err := ctx.argocd.GetList()
 	if err != nil {
 		return nil, err
 	}
 
-	return lo.FilterMap(applications, func(item models.ArgocdApplication, _ int) (models.ArgocdApplication, bool) {
+	ctx.events <- &models.SystemMessage{
+		Key:   models.ArgocdApplicationList,
+		Value: applications,
+	}
+
+	return lo.FilterMap(applications, func(item models.Application, _ int) (models.Application, bool) {
 		return item, ctx.hasService(item.Name)
 	}), nil
 }
 
-func (ctx *DeploymentManager) Create(service, version, namespace string, values map[string]string) (*models.ArgocdApplication, error) {
+func (ctx *DeploymentManager) Create(service, version, namespace string, values map[string]string) (*models.Application, error) {
 	if namespace == "" {
 		namespace = service
 	}
@@ -56,6 +64,13 @@ func (ctx *DeploymentManager) Create(service, version, namespace string, values 
 			service,
 			depends,
 		)
+
+		ctx.events <- &models.SystemMessage{
+			Key: models.ArgocdApplicationStatus,
+			Value: map[string]interface{}{
+				"message": message,
+			},
+		}
 
 		logger.Warn(message)
 
@@ -78,18 +93,18 @@ func (ctx *DeploymentManager) hasService(service string) bool {
 	return lo.Contains(serviceNames, service)
 }
 
-func (ctx *DeploymentManager) findDepends(service string) []models.ArgocdApplication {
+func (ctx *DeploymentManager) findDepends(service string) []models.Application {
 	application, _ := lo.Find(ctx.services, func(item config.ServiceConfig) bool {
 		return item.Name == service
 	})
 
 	deployedApplications, _ := ctx.argocd.GetList()
-	deployedApplicationNames := lo.Map(deployedApplications, func(item models.ArgocdApplication, _ int) string {
+	deployedApplicationNames := lo.Map(deployedApplications, func(item models.Application, _ int) string {
 		return item.Name
 	})
 
-	return lo.FilterMap(application.Depends, func(item config.ServiceDependConfig, _ int) (models.ArgocdApplication, bool) {
-		return models.ArgocdApplication{
+	return lo.FilterMap(application.Depends, func(item config.ServiceDependConfig, _ int) (models.Application, bool) {
+		return models.Application{
 			Name:    item.Name,
 			Version: item.Version,
 		}, !lo.Contains(deployedApplicationNames, item.Name)

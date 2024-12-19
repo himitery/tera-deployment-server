@@ -19,12 +19,13 @@ import (
 )
 
 type Argocd struct {
+	events        chan<- any
 	client        apiclient.Client
 	repository    string
 	metaNamespace string
 }
 
-func NewArgocd(conf *config.Config) ports.Argocd {
+func NewArgocd(conf *config.Config, events chan any) ports.Argocd {
 	client, err := apiclient.NewClient(&apiclient.ClientOptions{
 		ServerAddr: conf.Argocd.URL,
 		AuthToken:  conf.Argocd.Token,
@@ -37,13 +38,14 @@ func NewArgocd(conf *config.Config) ports.Argocd {
 	}
 
 	return &Argocd{
+		events:        events,
 		client:        client,
 		repository:    conf.Argocd.Repository,
 		metaNamespace: conf.Argocd.Metadata.Namespace,
 	}
 }
 
-func (ctx *Argocd) GetList() ([]models.ArgocdApplication, error) {
+func (ctx *Argocd) GetList() ([]models.Application, error) {
 	io, client, err := ctx.client.NewApplicationClient()
 	if err != nil {
 		logger.Error("failed to create Argocd application client", zap.Error(err))
@@ -59,15 +61,15 @@ func (ctx *Argocd) GetList() ([]models.ArgocdApplication, error) {
 		return nil, err
 	}
 
-	return lo.Map(data.Items, func(item v1alpha1.Application, index int) models.ArgocdApplication {
-		return models.ArgocdApplication{
+	return lo.Map(data.Items, func(item v1alpha1.Application, index int) models.Application {
+		return models.Application{
 			Name:    strings.ToLower(item.Name),
 			Version: item.Spec.Source.TargetRevision,
 		}
 	}), nil
 }
 
-func (ctx *Argocd) Create(service, version, namespace string, values map[string]string) (*models.ArgocdApplication, error) {
+func (ctx *Argocd) Create(service, version, namespace string, values map[string]string) (*models.Application, error) {
 	io, client, err := ctx.client.NewApplicationClient()
 	if err != nil {
 		logger.Error("failed to create Argocd application client", zap.Error(err))
@@ -137,19 +139,19 @@ func (ctx *Argocd) Create(service, version, namespace string, values map[string]
 		return nil, err
 	}
 
-	err = ctx.waitForApplicationSync(service, time.Minute*3)
-	if err != nil {
-		logger.Error("Argocd.Create: application sync failed", zap.Error(err))
-		return nil, err
-	}
+	go func() {
+		if err = ctx.waitForApplicationSync(service, version, time.Minute*3); err != nil {
+			logger.Error("Argocd.Create: application sync failed", zap.Error(err))
+		}
+	}()
 
-	return &models.ArgocdApplication{
+	return &models.Application{
 		Name:    strings.ToLower(data.Name),
 		Version: data.Spec.Source.TargetRevision,
 	}, nil
 }
 
-func (ctx *Argocd) waitForApplicationSync(service string, timeout time.Duration) error {
+func (ctx *Argocd) waitForApplicationSync(service, version string, timeout time.Duration) error {
 	syncCtx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
@@ -169,11 +171,20 @@ func (ctx *Argocd) waitForApplicationSync(service string, timeout time.Duration)
 		case <-syncCtx.Done():
 			return syncCtx.Err()
 		case <-ticker.C:
-			data, err := client.Get(context.Background(), &application.ApplicationQuery{
+			data, err := client.Get(syncCtx, &application.ApplicationQuery{
 				Name: &service,
 			})
 			if err != nil {
 				logger.Error("failed to get Argocd application", zap.Error(err))
+
+				ctx.events <- &models.SystemMessage{
+					Key: models.ArgocdApplicationStatus,
+					Value: map[string]interface{}{
+						"service": service,
+						"version": version,
+						"message": "failed to get Argocd application",
+					},
+				}
 
 				continue
 			}
@@ -183,6 +194,18 @@ func (ctx *Argocd) waitForApplicationSync(service string, timeout time.Duration)
 				zap.Any("status", data.Status.Sync.Status),
 				zap.Any("healthStatus", data.Status.Health.Status),
 			)
+
+			ctx.events <- &models.SystemMessage{
+				Key: models.ArgocdApplicationStatus,
+				Value: map[string]interface{}{
+					"service": service,
+					"version": version,
+					"status": map[string]interface{}{
+						"sync":   data.Status.Sync.Status,
+						"health": data.Status.Health.Status,
+					},
+				},
+			}
 
 			if data.Status.Sync.Status == v1alpha1.SyncStatusCodeSynced && data.Status.Health.Status == health.HealthStatusHealthy {
 				logger.Info("Argocd application synced")

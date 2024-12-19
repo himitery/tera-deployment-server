@@ -48,7 +48,7 @@ func NewKafkaConsumer(conf *config.Config) ports.KafkaConsumer {
 	}
 }
 
-func (ctx *Consumer) Start(events chan<- *models.EventMessage) error {
+func (ctx *Consumer) Start(events chan<- any) error {
 	if err := ctx.consumer.Subscribe(ctx.topic, nil); err != nil {
 		return err
 	}
@@ -65,7 +65,7 @@ func (ctx *Consumer) Start(events chan<- *models.EventMessage) error {
 					continue
 				}
 
-				var message *models.EventMessage
+				var message *models.KafkaMessage
 				if err := json.Unmarshal(event.Value, &message); err != nil {
 					logger.Warn("failed to unmarshal event", zap.Error(err))
 					continue

@@ -1,6 +1,7 @@
 package services
 
 import (
+	"fmt"
 	"go.uber.org/zap"
 	"strings"
 	"tera/deployment/internal/domain/models"
@@ -13,16 +14,15 @@ type EventProcessor struct {
 	manager  usecases.DeploymentManager
 	consumer ports.KafkaConsumer
 	producer ports.KafkaProducer
-	events   chan *models.EventMessage
+	events   chan any
 }
 
 func NewEventProcessor(
+	events chan any,
 	manager usecases.DeploymentManager,
 	consumer ports.KafkaConsumer,
 	producer ports.KafkaProducer,
 ) usecases.EventProcessor {
-	events := make(chan *models.EventMessage)
-
 	return &EventProcessor{
 		manager:  manager,
 		consumer: consumer,
@@ -46,7 +46,6 @@ func (ctx *EventProcessor) Register() error {
 }
 
 func (ctx *EventProcessor) Close() error {
-	close(ctx.events)
 	if err := ctx.consumer.Close(); err != nil {
 		return err
 	}
@@ -54,21 +53,23 @@ func (ctx *EventProcessor) Close() error {
 	return nil
 }
 
-func (ctx *EventProcessor) process(message *models.EventMessage) {
-	logger.Info("new message received", zap.Any("message", message))
+func (ctx *EventProcessor) process(data any) {
+	logger.Info("new message received", zap.Any("message", data))
 
+	switch message := data.(type) {
+	case *models.KafkaMessage:
+		ctx.processKafkaMessage(message)
+	case *models.SystemMessage:
+		ctx.processSystemMessage(message)
+	}
+}
+
+func (ctx *EventProcessor) processKafkaMessage(message *models.KafkaMessage) {
 	switch strings.ToLower(message.Action) {
 	case "fetch":
 		applications, err := ctx.manager.GetList()
 		if err != nil {
 			logger.Error("failed to fetch application list", zap.Error(err))
-			return
-		}
-
-		err = ctx.producer.Produce(models.ArgocdApplicationList, applications)
-		if err != nil {
-			logger.Error("failed to produce event", zap.Error(err))
-
 			return
 		}
 
@@ -83,5 +84,21 @@ func (ctx *EventProcessor) process(message *models.EventMessage) {
 		if application != nil && err == nil {
 			logger.Info("application created", zap.Any("application", application))
 		}
+	default:
+		logger.Warn("unknown action", zap.String("action", message.Action))
+	}
+}
+
+func (ctx *EventProcessor) processSystemMessage(message *models.SystemMessage) {
+	for idx := 0; idx < 3; idx++ {
+		if err := ctx.producer.Produce(message.Key, message.Value); err != nil {
+			logger.Error(
+				fmt.Sprintf("failed to produce message (try: %d)", idx),
+				zap.Any("message", message),
+				zap.Error(err),
+			)
+		}
+
+		break
 	}
 }

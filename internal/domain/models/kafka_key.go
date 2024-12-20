@@ -5,11 +5,11 @@ type Key struct {
 }
 
 var (
-	ArgocdApplicationList   Key = Key{Value: "ArgocdApplicationList"}
-	ArgocdApplicationStatus Key = Key{Value: "ArgocdApplicationStatus"}
+	ArgocdApplicationList   Key = Key{Value: "argocd_application_list"}
+	ArgocdApplicationStatus Key = Key{Value: "argocd_application_status"}
 )
 
 var (
-	FetchArgocdApplication      = Key{Value: "FetchArgocdApplication"}
-	CreateArgocdApplication Key = Key{Value: "CreateArgocdApplication"}
+	FetchArgocdApplication      = Key{Value: "fetch_argocd_application"}
+	CreateArgocdApplication Key = Key{Value: "create_argocd_application"}
 )

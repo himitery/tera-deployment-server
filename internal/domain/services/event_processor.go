@@ -54,8 +54,6 @@ func (ctx *EventProcessor) Close() error {
 }
 
 func (ctx *EventProcessor) process(data any) {
-	logger.Info("new message received", zap.Any("message", data))
-
 	switch message := data.(type) {
 	case *models.KafkaMessage:
 		ctx.processKafkaMessage(message)
